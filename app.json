@@ -1,29 +1,36 @@
 {
   "expo": {
-    "name": "ShopHuntHunter",
-    "slug": "ShopHuntHunter",
+    "name": "ShopHunt Hunter",
+    "slug": "shophunt-hunter",
+    "scheme": "shophunthunter",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
+    "backgroundColor": "#F8FBFF",
+    "primaryColor": "#2563EB",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#F8FBFF"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.olymaris.shophunthunter"
     },
     "android": {
+      "package": "com.olymaris.shophunthunter",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#2563EB"
       },
       "edgeToEdgeEnabled": true
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
+    "extra": {
+      "eas": {
+        "projectId": "4dc74551-5e70-48dd-a8fd-ff5316e1eda6"
+      }
     }
   }
 }
