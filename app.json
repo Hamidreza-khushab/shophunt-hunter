@@ -15,6 +15,17 @@
       "resizeMode": "contain",
       "backgroundColor": "#F8FBFF"
     },
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 192,
+          "resizeMode": "contain",
+          "backgroundColor": "#F8FBFF"
+        }
+      ]
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.olymaris.shophunter",

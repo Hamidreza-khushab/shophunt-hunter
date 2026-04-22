@@ -14,7 +14,7 @@ The QR identity in this app is not a printed wall asset. It represents a virtual
 
 ## Setup
 
-Create `.env` from `.env.example` and fill it with the Firebase web app values from the existing ShopHunt Firebase project. Use the same values as the dashboard, but with the `EXPO_PUBLIC_` prefix instead of `NEXT_PUBLIC_`.
+Create `.env` from `.env.example` and fill it with the public web/backend values from the existing ShopHunt project. Use the same Firebase values as the dashboard, but with the `EXPO_PUBLIC_` prefix instead of `NEXT_PUBLIC_`.
 
 ```sh
 npm install
