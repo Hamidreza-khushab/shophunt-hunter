@@ -34,6 +34,7 @@ expo-start*.log
 # local env files
 .env
 .env*.local
+/functions/.env
 
 # typescript
 *.tsbuildinfo
@@ -41,3 +42,5 @@ expo-start*.log
 # generated native folders
 /ios
 /android
+/google-services.json
+/GoogleService-Info.plist

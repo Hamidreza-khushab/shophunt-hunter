@@ -3,6 +3,10 @@ import * as NavigationBar from "expo-navigation-bar";
 import * as SplashScreen from "expo-splash-screen";
 import { useCallback, useEffect, useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { assertHunterAccess, getAuthErrorMessage } from "./src/lib/auth";
+import { firebaseAuth } from "./src/lib/firebase";
+import AuthScreen from "./src/screens/AuthScreen";
 import IntroScreen from "./src/screens/IntroScreen";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -12,7 +16,14 @@ SplashScreen.setOptions({
 });
 
 export default function App() {
-  const [appIsReady, setAppIsReady] = useState(false);
+  const [authState, setAuthState] = useState({
+    checking: true,
+    message: "",
+    profile: null,
+    user: null,
+  });
+
+  const appIsReady = !authState.checking;
 
   useEffect(() => {
     if (Platform.OS !== "android") {
@@ -32,7 +43,56 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    setAppIsReady(true);
+    if (!firebaseAuth) {
+      setAuthState((currentState) => ({
+        ...currentState,
+        checking: false,
+      }));
+      return undefined;
+    }
+
+    let isMounted = true;
+
+    const unsubscribe = onAuthStateChanged(firebaseAuth, async (user) => {
+      if (!user) {
+        if (isMounted) {
+          setAuthState({
+            checking: false,
+            message: "",
+            profile: null,
+            user: null,
+          });
+        }
+        return;
+      }
+
+      try {
+        const profile = await assertHunterAccess(user);
+        if (isMounted) {
+          setAuthState({
+            checking: false,
+            message: "",
+            profile,
+            user,
+          });
+        }
+      } catch (error) {
+        await signOut(firebaseAuth).catch(() => {});
+        if (isMounted) {
+          setAuthState({
+            checking: false,
+            message: getAuthErrorMessage(error),
+            profile: null,
+            user: null,
+          });
+        }
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   const handleRootLayout = useCallback(() => {
@@ -48,7 +108,19 @@ export default function App() {
   return (
     <View style={styles.root} onLayout={handleRootLayout}>
       <StatusBar hidden style="light" />
-      <IntroScreen />
+      {authState.user ? (
+        <IntroScreen />
+      ) : (
+        <AuthScreen
+          authMessage={authState.message}
+          onClearAuthMessage={() =>
+            setAuthState((currentState) => ({
+              ...currentState,
+              message: "",
+            }))
+          }
+        />
+      )}
     </View>
   );
 }

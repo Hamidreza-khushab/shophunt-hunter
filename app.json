@@ -24,7 +24,9 @@
           "resizeMode": "contain",
           "backgroundColor": "#F8FBFF"
         }
-      ]
+      ],
+      "expo-web-browser",
+      "expo-secure-store"
     ],
     "ios": {
       "supportsTablet": true,

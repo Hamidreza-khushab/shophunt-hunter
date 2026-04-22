@@ -1,0 +1,451 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        (exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+          exists(/databases/$(database)/documents/admin/$(request.auth.uid)));
+    }
+
+    function hasOnlyAllowedKeys(data) {
+      return data.keys().hasOnly([
+        "email",
+        "fullName",
+        "userType",
+        "planType",
+        "companyName",
+        "city",
+        "industry",
+        "website",
+        "note",
+        "referrer",
+        "firstSeenAt",
+        "sessionId",
+        "gclid",
+        "createdAt",
+        "sourcePath",
+        "utm",
+        "lang"
+      ]);
+    }
+
+    function hasOnlyEventKeys(data) {
+      return data.keys().hasOnly([
+        "eventName",
+        "emailHash",
+        "userType",
+        "planType",
+        "sourcePath",
+        "utm",
+        "referrer",
+        "sessionId",
+        "gclid",
+        "lang",
+        "createdAt"
+      ]);
+    }
+
+    function isValidUtm(data) {
+      return !("utm" in data) ||
+        (data.utm is map &&
+          data.utm.keys().hasOnly([
+            "utm_source",
+            "utm_medium",
+            "utm_campaign",
+            "utm_content",
+            "utm_term"
+          ]) &&
+          (!("utm_source" in data.utm) || data.utm.utm_source is string) &&
+          (!("utm_medium" in data.utm) || data.utm.utm_medium is string) &&
+          (!("utm_campaign" in data.utm) || data.utm.utm_campaign is string) &&
+          (!("utm_content" in data.utm) || data.utm.utm_content is string) &&
+          (!("utm_term" in data.utm) || data.utm.utm_term is string));
+    }
+
+    function isValidWaitlistCreate(docId) {
+      return hasOnlyAllowedKeys(request.resource.data) &&
+        request.resource.data.email is string &&
+        request.resource.data.email == docId &&
+        request.resource.data.email.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$') &&
+        request.resource.data.userType == "business" &&
+        request.resource.data.planType in ["starter", "growth", "premium"] &&
+        request.resource.data.lang == "de" &&
+        request.resource.data.createdAt == request.time &&
+        (!("fullName" in request.resource.data) || request.resource.data.fullName is string) &&
+        (!("companyName" in request.resource.data) || request.resource.data.companyName is string) &&
+        (!("city" in request.resource.data) || request.resource.data.city is string) &&
+        (!("industry" in request.resource.data) || request.resource.data.industry is string) &&
+        (!("website" in request.resource.data) || request.resource.data.website is string) &&
+        (!("note" in request.resource.data) ||
+          (request.resource.data.note is string && request.resource.data.note.size() <= 280)) &&
+        (!("referrer" in request.resource.data) ||
+          (request.resource.data.referrer is string && request.resource.data.referrer.size() <= 2000)) &&
+        (!("firstSeenAt" in request.resource.data) ||
+          (request.resource.data.firstSeenAt is timestamp && request.resource.data.firstSeenAt <= request.time)) &&
+        (!("sessionId" in request.resource.data) ||
+          (request.resource.data.sessionId is string && request.resource.data.sessionId.size() <= 80)) &&
+        (!("gclid" in request.resource.data) ||
+          (request.resource.data.gclid is string && request.resource.data.gclid.size() <= 128)) &&
+        (!("sourcePath" in request.resource.data) || request.resource.data.sourcePath is string) &&
+        ("companyName" in request.resource.data &&
+          request.resource.data.companyName.size() >= 2) &&
+        isValidUtm(request.resource.data);
+    }
+
+    function isValidEventCreate() {
+      return hasOnlyEventKeys(request.resource.data) &&
+        request.resource.data.eventName == "waitlist_submit" &&
+        request.resource.data.emailHash is string &&
+        request.resource.data.emailHash.matches('^[0-9a-f]{64}$') &&
+        request.resource.data.userType == "business" &&
+        request.resource.data.planType in ["starter", "growth", "premium"] &&
+        request.resource.data.lang == "de" &&
+        request.resource.data.createdAt == request.time &&
+        (!("sourcePath" in request.resource.data) || request.resource.data.sourcePath is string) &&
+        (!("referrer" in request.resource.data) ||
+          (request.resource.data.referrer is string && request.resource.data.referrer.size() <= 2000)) &&
+        (!("sessionId" in request.resource.data) ||
+          (request.resource.data.sessionId is string && request.resource.data.sessionId.size() <= 80)) &&
+        (!("gclid" in request.resource.data) ||
+          (request.resource.data.gclid is string && request.resource.data.gclid.size() <= 128)) &&
+        isValidUtm(request.resource.data);
+    }
+
+    match /waitlist/{emailId} {
+      allow create: if isValidWaitlistCreate(emailId);
+      allow read: if isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    match /events/{eventId} {
+      allow create: if isValidEventCreate();
+      allow read: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    function hasOnlyInvestorMessageKeys(data) {
+      return data.keys().hasOnly([
+        "email",
+        "fullName",
+        "companyName",
+        "message",
+        "referrer",
+        "firstSeenAt",
+        "sessionId",
+        "gclid",
+        "createdAt",
+        "sourcePath",
+        "utm",
+        "lang",
+        "privacyAccepted"
+      ]);
+    }
+
+    function isValidInvestorMessageCreate() {
+      return hasOnlyInvestorMessageKeys(request.resource.data) &&
+        request.resource.data.email is string &&
+        request.resource.data.email.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$') &&
+        request.resource.data.message is string &&
+        request.resource.data.message.size() >= 10 &&
+        request.resource.data.message.size() <= 1200 &&
+        request.resource.data.lang == "de" &&
+        request.resource.data.privacyAccepted == true &&
+        request.resource.data.createdAt == request.time &&
+        (!("fullName" in request.resource.data) || request.resource.data.fullName is string) &&
+        (!("companyName" in request.resource.data) || request.resource.data.companyName is string) &&
+        (!("referrer" in request.resource.data) ||
+          (request.resource.data.referrer is string && request.resource.data.referrer.size() <= 2000)) &&
+        (!("firstSeenAt" in request.resource.data) ||
+          (request.resource.data.firstSeenAt is timestamp && request.resource.data.firstSeenAt <= request.time)) &&
+        (!("sessionId" in request.resource.data) ||
+          (request.resource.data.sessionId is string && request.resource.data.sessionId.size() <= 80)) &&
+        (!("gclid" in request.resource.data) ||
+          (request.resource.data.gclid is string && request.resource.data.gclid.size() <= 128)) &&
+        (!("sourcePath" in request.resource.data) || request.resource.data.sourcePath is string) &&
+        isValidUtm(request.resource.data);
+    }
+
+    match /investorMessages/{messageId} {
+      allow create: if isValidInvestorMessageCreate();
+      allow read: if isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    function hasOnlyContactMessageKeys(data) {
+      return data.keys().hasOnly([
+        "email",
+        "fullName",
+        "subject",
+        "message",
+        "referrer",
+        "firstSeenAt",
+        "sessionId",
+        "gclid",
+        "createdAt",
+        "sourcePath",
+        "utm",
+        "lang",
+        "privacyAccepted"
+      ]);
+    }
+
+    function isValidContactMessageCreate() {
+      return hasOnlyContactMessageKeys(request.resource.data) &&
+        request.resource.data.email is string &&
+        request.resource.data.email.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$') &&
+        request.resource.data.message is string &&
+        request.resource.data.message.size() >= 10 &&
+        request.resource.data.message.size() <= 1200 &&
+        request.resource.data.lang == "de" &&
+        request.resource.data.privacyAccepted == true &&
+        request.resource.data.createdAt == request.time &&
+        (!("subject" in request.resource.data) ||
+          (request.resource.data.subject is string && request.resource.data.subject.size() <= 120)) &&
+        (!("fullName" in request.resource.data) || request.resource.data.fullName is string) &&
+        (!("referrer" in request.resource.data) ||
+          (request.resource.data.referrer is string && request.resource.data.referrer.size() <= 2000)) &&
+        (!("firstSeenAt" in request.resource.data) ||
+          (request.resource.data.firstSeenAt is timestamp && request.resource.data.firstSeenAt <= request.time)) &&
+        (!("sessionId" in request.resource.data) ||
+          (request.resource.data.sessionId is string && request.resource.data.sessionId.size() <= 80)) &&
+        (!("gclid" in request.resource.data) ||
+          (request.resource.data.gclid is string && request.resource.data.gclid.size() <= 128)) &&
+        (!("sourcePath" in request.resource.data) || request.resource.data.sourcePath is string) &&
+        isValidUtm(request.resource.data);
+    }
+
+    match /contactMessages/{messageId} {
+      allow create: if isValidContactMessageCreate();
+      allow read: if isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    match /pendingFormConfirmations/{confirmationId} {
+      allow read, update, delete: if isAdmin();
+      allow create: if false;
+    }
+
+    function hasOnlyIndustryKeys(data) {
+      return data.keys().hasOnly([
+        "slug",
+        "status",
+        "title",
+        "lead",
+        "metaTitle",
+        "metaDescription",
+        "heroImage",
+        "sections",
+        "publishedAt",
+        "updatedAt"
+      ]);
+    }
+
+    function hasOnlyPostKeys(data) {
+      return data.keys().hasOnly([
+        "slug",
+        "status",
+        "title",
+        "excerpt",
+        "metaTitle",
+        "metaDescription",
+        "coverImage",
+        "coverAlt",
+        "category",
+        "tags",
+        "content",
+        "publishedAt",
+        "updatedAt",
+        "readingTime",
+        "relatedIndustries"
+      ]);
+    }
+
+    function isCmsStatus(value) {
+      return value in ["draft", "published"];
+    }
+
+    function isValidCmsTimestamp(field) {
+      return !(field in request.resource.data) || request.resource.data[field] is timestamp;
+    }
+
+    match /admins/{uid} {
+      allow get: if isSignedIn() && request.auth.uid == uid;
+      allow list: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /admin/{uid} {
+      allow get: if isSignedIn() && request.auth.uid == uid;
+      allow list: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /customerProfiles/{uid} {
+      allow get: if isSignedIn() && request.auth.uid == uid;
+      allow list: if isAdmin();
+      allow create, update, delete: if false;
+
+      match /campaigns/{campaignId} {
+        allow read: if isAdmin();
+        allow create, update, delete: if false;
+      }
+    }
+
+    function hasOnlyHunterProfileKeys(data) {
+      return data.keys().hasOnly([
+        "uid",
+        "email",
+        "displayName",
+        "photoURL",
+        "role",
+        "allowedApps",
+        "accountStatus",
+        "emailVerified",
+        "emailVerifiedBy",
+        "authProvider",
+        "termsAccepted",
+        "termsAcceptedAt",
+        "createdAt",
+        "updatedAt",
+        "lastLoginAt"
+      ]);
+    }
+
+    function isValidHunterProfileCreate(uid) {
+      return isSignedIn() &&
+        request.auth.uid == uid &&
+        hasOnlyHunterProfileKeys(request.resource.data) &&
+        request.resource.data.uid == uid &&
+        request.auth.token.email == request.resource.data.email &&
+        request.resource.data.email is string &&
+        request.resource.data.email.matches('^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$') &&
+        request.resource.data.displayName is string &&
+        (request.resource.data.photoURL == null || request.resource.data.photoURL is string) &&
+        request.resource.data.role == "hunter" &&
+        request.resource.data.allowedApps is list &&
+        request.resource.data.allowedApps.size() == 1 &&
+        request.resource.data.allowedApps[0] == "hunter" &&
+        request.resource.data.accountStatus == "active" &&
+        request.resource.data.emailVerified == true &&
+        request.resource.data.emailVerifiedBy in ["six_digit_code", "google"] &&
+        request.resource.data.authProvider in ["password", "google.com"] &&
+        request.auth.token.firebase.sign_in_provider == request.resource.data.authProvider &&
+        hasValidHunterEmailVerification() &&
+        request.resource.data.termsAccepted == true &&
+        request.resource.data.termsAcceptedAt == request.time &&
+        request.resource.data.createdAt == request.time &&
+        request.resource.data.updatedAt == request.time &&
+        request.resource.data.lastLoginAt == request.time;
+    }
+
+    function hasValidHunterEmailVerification() {
+      return request.resource.data.authProvider == "google.com" ||
+        (
+          request.resource.data.authProvider == "password" &&
+          exists(/databases/$(database)/documents/hunterEmailVerifications/$(request.resource.data.email)) &&
+          get(/databases/$(database)/documents/hunterEmailVerifications/$(request.resource.data.email)).data.verified == true &&
+          get(/databases/$(database)/documents/hunterEmailVerifications/$(request.resource.data.email)).data.role == "hunter" &&
+          get(/databases/$(database)/documents/hunterEmailVerifications/$(request.resource.data.email)).data.expiresAt > request.time
+        );
+    }
+
+    function isValidHunterProfileUpdate(uid) {
+      return isSignedIn() &&
+        request.auth.uid == uid &&
+        resource.data.role == "hunter" &&
+        request.resource.data.role == resource.data.role &&
+        request.resource.data.uid == resource.data.uid &&
+        request.resource.data.email == resource.data.email &&
+        request.resource.data.allowedApps == resource.data.allowedApps &&
+        request.resource.data.accountStatus == resource.data.accountStatus &&
+        request.resource.data.emailVerified == resource.data.emailVerified &&
+        request.resource.data.emailVerifiedBy == resource.data.emailVerifiedBy &&
+        request.resource.data.authProvider == resource.data.authProvider &&
+        request.resource.data.termsAccepted == resource.data.termsAccepted &&
+        request.resource.data.termsAcceptedAt == resource.data.termsAcceptedAt &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "displayName",
+          "photoURL",
+          "updatedAt",
+          "lastLoginAt"
+        ]) &&
+        (!("displayName" in request.resource.data) ||
+          request.resource.data.displayName is string) &&
+        (!("photoURL" in request.resource.data) ||
+          request.resource.data.photoURL == null ||
+          request.resource.data.photoURL is string) &&
+        request.resource.data.updatedAt == request.time &&
+        request.resource.data.lastLoginAt == request.time;
+    }
+
+    match /users/{uid} {
+      allow get: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isValidHunterProfileCreate(uid);
+      allow update: if isValidHunterProfileUpdate(uid) || isAdmin();
+      allow delete: if false;
+    }
+
+    match /hunterEmailVerifications/{emailId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /hunterEmailVerificationIpLimits/{limitId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /{path=**}/campaigns/{campaignId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /industries/{slugId} {
+      allow read: if resource.data.status == "published" || isAdmin();
+
+      allow create, update, delete: if isAdmin() &&
+        hasOnlyIndustryKeys(request.resource.data) &&
+        request.resource.data.slug is string &&
+        request.resource.data.slug == slugId &&
+        isCmsStatus(request.resource.data.status) &&
+        request.resource.data.updatedAt == request.time &&
+        isValidCmsTimestamp("publishedAt") &&
+        (!(request.resource.data.status == "published") ||
+          ("publishedAt" in request.resource.data));
+    }
+
+    match /posts/{slugId} {
+      allow read: if resource.data.status == "published" || isAdmin();
+
+      allow create, update, delete: if isAdmin() &&
+        hasOnlyPostKeys(request.resource.data) &&
+        request.resource.data.slug is string &&
+        request.resource.data.slug == slugId &&
+        isCmsStatus(request.resource.data.status) &&
+        (!("coverAlt" in request.resource.data) ||
+          (request.resource.data.coverAlt is string && request.resource.data.coverAlt.size() <= 200)) &&
+        (!("tags" in request.resource.data) ||
+          (request.resource.data.tags is list && request.resource.data.tags.size() <= 20)) &&
+        (!("relatedIndustries" in request.resource.data) ||
+          (request.resource.data.relatedIndustries is list && request.resource.data.relatedIndustries.size() <= 20)) &&
+        (!("readingTime" in request.resource.data) ||
+          (request.resource.data.readingTime is int &&
+            request.resource.data.readingTime >= 1 &&
+            request.resource.data.readingTime <= 120)) &&
+        request.resource.data.updatedAt == request.time &&
+        isValidCmsTimestamp("publishedAt") &&
+        (!(request.resource.data.status == "published") ||
+          ("publishedAt" in request.resource.data));
+    }
+
+    match /settings/{docId} {
+      allow read, write: if isAdmin();
+    }
+  }
+}

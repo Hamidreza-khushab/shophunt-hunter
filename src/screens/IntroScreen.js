@@ -20,12 +20,12 @@ const introPoints = [
   {
     title: "AR-Spawns",
     text:
-      "QR-Identitaeten werden nicht an Waende geklebt. Sie erscheinen als virtuelle Encounter in der Kamera.",
+      "QR-Identitäten werden nicht an Wände geklebt. Sie erscheinen als virtuelle Begegnungen in der Kamera.",
   },
   {
-    title: "Rewards",
+    title: "Belohnungen",
     text:
-      "Aus Spawns entstehen spaeter Discounts, Rewards und Missionen direkt aus dem gemeinsamen Firebase Backend.",
+      "Aus Spawns entstehen später Rabatte, Belohnungen und Missionen direkt aus dem gemeinsamen Firebase-Backend.",
   },
 ];
 
@@ -51,18 +51,18 @@ export default function IntroScreen() {
               />
               <View>
                 <Text style={styles.brand}>Shop Hunter</Text>
-                <Text style={styles.brandSubline}>AR campaign hunt</Text>
+                <Text style={styles.brandSubline}>AR-Kampagnenjagd</Text>
               </View>
             </View>
 
             <View style={styles.heroCopy}>
               <View style={styles.kickerPill}>
-                <Text style={styles.kicker}>Powered by ShopHunt</Text>
+                <Text style={styles.kicker}>Bereitgestellt von ShopHunt</Text>
               </View>
-              <Text style={styles.title}>Finde Spawns. Oeffne Rewards.</Text>
+              <Text style={styles.title}>Finde Spawns. Öffne Belohnungen.</Text>
               <Text style={styles.lead}>
-                Bewege dich durch reale Orte, entdecke virtuelle QR-Identitaeten
-                im AR-Radius und starte spaeter Kampagnen direkt aus der Kamera.
+                Bewege dich durch reale Orte, entdecke virtuelle QR-Identitäten
+                im AR-Radius und starte später Kampagnen direkt aus der Kamera.
               </Text>
             </View>
           </View>
@@ -70,12 +70,12 @@ export default function IntroScreen() {
 
         <View style={styles.summary}>
           <Text style={styles.summaryEyebrow}>Worum es geht</Text>
-          <Text style={styles.summaryTitle}>Eine mobile Hunt fuer echte Orte.</Text>
+          <Text style={styles.summaryTitle}>Eine mobile Jagd für echte Orte.</Text>
           <Text style={styles.summaryText}>
-            Shop Hunter ist die App fuer Spieler, die Kampagnen von lokalen
+            Shop Hunter ist die App für Spieler, die Kampagnen von lokalen
             Shops entdecken. Das Dashboard erstellt Kampagnen und virtuelle
-            Spawn-QRs; diese App ist die mobile Seite fuer den spaeteren
-            Encounter.
+            Spawn-QRs; diese App ist die mobile Seite für die spätere
+            Begegnung.
           </Text>
         </View>
 
@@ -106,17 +106,17 @@ export default function IntroScreen() {
         <View style={styles.notice}>
           <View style={styles.noticeHeader}>
             <Text style={styles.noticeLabel}>AR statt Wandlabel</Text>
-            <Text style={styles.noticeBadge}>QR identity</Text>
+            <Text style={styles.noticeBadge}>QR-Identität</Text>
           </View>
           <Text style={styles.noticeText}>
             QR bedeutet in Shop Hunter keinen physischen Aufkleber im Laden.
-            Jeder Spawn besitzt eine eigene virtuelle QR-Identitaet, die im
+            Jeder Spawn besitzt eine eigene virtuelle QR-Identität, die im
             Jagdradius als mobile AR-Begegnung sichtbar wird.
           </Text>
         </View>
 
         <Pressable style={styles.primaryAction}>
-          <Text style={styles.primaryActionText}>Weiter zur Hunt</Text>
+          <Text style={styles.primaryActionText}>Weiter zur Jagd</Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
