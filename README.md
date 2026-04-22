@@ -1,4 +1,4 @@
-# ShopHunt Hunter
+# Shop Hunter
 
 Expo app shell for hunters who discover ShopHunt campaign spawns through mobile AR encounters.
 

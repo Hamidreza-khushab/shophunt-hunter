@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "ShopHunt Hunter",
+    "name": "Shop Hunter",
     "slug": "shophunt-hunter",
-    "scheme": "shophunthunter",
+    "scheme": "shophunter",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -17,15 +17,21 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.olymaris.shophunthunter"
+      "bundleIdentifier": "com.olymaris.shophunter",
+      "requireFullScreen": true
     },
     "android": {
-      "package": "com.olymaris.shophunthunter",
+      "package": "com.olymaris.shophunter",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#2563EB"
       },
       "edgeToEdgeEnabled": true
+    },
+    "androidNavigationBar": {
+      "visible": "immersive",
+      "backgroundColor": "#0B1220",
+      "barStyle": "light-content"
     },
     "extra": {
       "eas": {

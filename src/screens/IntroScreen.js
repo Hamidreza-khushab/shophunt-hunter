@@ -1,5 +1,7 @@
 import {
   Image,
+  ImageBackground,
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -11,19 +13,19 @@ import { colors, spacing } from "../theme";
 
 const introPoints = [
   {
-    title: "Lokale Angebote werden spielerisch",
+    title: "Entdecken",
     text:
-      "ShopHunt verbindet echte Orte, Kampagnen und digitale Belohnungen zu einer kurzen mobilen Hunt.",
+      "Finde aktive Kampagnen in deiner Umgebung und bewege dich in den Jagdradius.",
   },
   {
-    title: "AR-Spawns statt Wand-QRs",
+    title: "AR-Spawns",
     text:
-      "Virtuelle QR-Identitaeten erscheinen spaeter im Jagdradius als AR-Begegnungen in der Kamera.",
+      "QR-Identitaeten werden nicht an Waende geklebt. Sie erscheinen als virtuelle Encounter in der Kamera.",
   },
   {
-    title: "Direkt mit dem ShopHunt Backend verbunden",
+    title: "Rewards",
     text:
-      "Die Hunter-App ist fuer dieselben Firebase-Kampagnen, Spawns und QR-Tokens vorbereitet.",
+      "Aus Spawns entstehen spaeter Discounts, Rewards und Missionen direkt aus dem gemeinsamen Firebase Backend.",
   },
 ];
 
@@ -34,78 +36,87 @@ export default function IntroScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.header}>
-          <Image
-            source={require("../../assets/icon.png")}
-            style={styles.logo}
-            resizeMode="contain"
-          />
-          <View>
-            <Text style={styles.brand}>ShopHunt</Text>
-            <Text style={styles.brandSubline}>Hunter App</Text>
-          </View>
-        </View>
-
-        <View style={styles.hero}>
-          <View style={styles.heroMedia}>
-            <View style={styles.radarOuter}>
-              <View style={styles.radarMiddle}>
-                <View style={styles.radarCore}>
-                  <Text style={styles.radarQr}>QR</Text>
-                </View>
+        <ImageBackground
+          source={require("../../assets/hero-home.png")}
+          style={styles.hero}
+          imageStyle={styles.heroImage}
+          resizeMode="cover"
+        >
+          <View style={styles.heroShade}>
+            <View style={styles.header}>
+              <Image
+                source={require("../../assets/icon.png")}
+                style={styles.logo}
+                resizeMode="contain"
+              />
+              <View>
+                <Text style={styles.brand}>Shop Hunter</Text>
+                <Text style={styles.brandSubline}>AR campaign hunt</Text>
               </View>
             </View>
-            <View style={styles.arBadge}>
-              <Text style={styles.arBadgeText}>AR Spawn</Text>
+
+            <View style={styles.heroCopy}>
+              <View style={styles.kickerPill}>
+                <Text style={styles.kicker}>Powered by ShopHunt</Text>
+              </View>
+              <Text style={styles.title}>Finde Spawns. Oeffne Rewards.</Text>
+              <Text style={styles.lead}>
+                Bewege dich durch reale Orte, entdecke virtuelle QR-Identitaeten
+                im AR-Radius und starte spaeter Kampagnen direkt aus der Kamera.
+              </Text>
             </View>
           </View>
+        </ImageBackground>
 
-          <Text style={styles.kicker}>Lokale Hunt Experience</Text>
-          <Text style={styles.title}>Jage Angebote in deiner Umgebung.</Text>
-          <Text style={styles.lead}>
-            ShopHunt macht Kampagnen auffindbar: Hunter bewegen sich in den
-            Kampagnenradius, entdecken virtuelle Spawns und koennen spaeter
-            daraus Rewards, Discounts oder Missionen starten.
+        <View style={styles.summary}>
+          <Text style={styles.summaryEyebrow}>Worum es geht</Text>
+          <Text style={styles.summaryTitle}>Eine mobile Hunt fuer echte Orte.</Text>
+          <Text style={styles.summaryText}>
+            Shop Hunter ist die App fuer Spieler, die Kampagnen von lokalen
+            Shops entdecken. Das Dashboard erstellt Kampagnen und virtuelle
+            Spawn-QRs; diese App ist die mobile Seite fuer den spaeteren
+            Encounter.
           </Text>
         </View>
 
-        <View style={styles.notice}>
-          <Text style={styles.noticeTitle}>Wichtig zur QR-Logik</Text>
-          <Text style={styles.noticeText}>
-            QR bedeutet hier keine gedruckte Markierung an einer Wand. Jeder
-            Spawn hat eine eigene virtuelle QR-Identitaet, die in der mobilen
-            AR-Encounter-Schicht verwendet wird.
-          </Text>
-        </View>
-
-        <View style={styles.points}>
+        <View style={styles.pointsGrid}>
           {introPoints.map((item, index) => (
-            <View key={item.title} style={styles.pointRow}>
+            <View key={item.title} style={styles.pointCard}>
               <View
                 style={[
-                  styles.pointIndex,
-                  index === 1 ? styles.pointIndexAccent : null,
+                  styles.pointIcon,
+                  index === 1 ? styles.pointIconAccent : null,
                 ]}
               >
                 <Text
                   style={[
-                    styles.pointIndexText,
-                    index === 1 ? styles.pointIndexTextAccent : null,
+                    styles.pointIconText,
+                    index === 1 ? styles.pointIconTextAccent : null,
                   ]}
                 >
                   {index + 1}
                 </Text>
               </View>
-              <View style={styles.pointContent}>
-                <Text style={styles.pointTitle}>{item.title}</Text>
-                <Text style={styles.pointText}>{item.text}</Text>
-              </View>
+              <Text style={styles.pointTitle}>{item.title}</Text>
+              <Text style={styles.pointText}>{item.text}</Text>
             </View>
           ))}
         </View>
 
+        <View style={styles.notice}>
+          <View style={styles.noticeHeader}>
+            <Text style={styles.noticeLabel}>AR statt Wandlabel</Text>
+            <Text style={styles.noticeBadge}>QR identity</Text>
+          </View>
+          <Text style={styles.noticeText}>
+            QR bedeutet in Shop Hunter keinen physischen Aufkleber im Laden.
+            Jeder Spawn besitzt eine eigene virtuelle QR-Identitaet, die im
+            Jagdradius als mobile AR-Begegnung sichtbar wird.
+          </Text>
+        </View>
+
         <Pressable style={styles.primaryAction}>
-          <Text style={styles.primaryActionText}>Startscreen bereit</Text>
+          <Text style={styles.primaryActionText}>Weiter zur Hunt</Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -115,98 +126,63 @@ export default function IntroScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.appBg,
+    backgroundColor: colors.white,
   },
   content: {
     flexGrow: 1,
-    paddingHorizontal: spacing.pageX,
+    paddingHorizontal: 0,
     paddingBottom: 28,
-    paddingTop: 18,
   },
   header: {
     alignItems: "center",
     flexDirection: "row",
     gap: 12,
+    paddingHorizontal: spacing.pageX,
+    paddingTop: 18,
   },
   logo: {
     backgroundColor: colors.white,
-    borderColor: colors.inkBorder,
+    borderColor: "rgba(255,255,255,0.7)",
     borderRadius: 8,
     borderWidth: 1,
     height: 48,
     width: 48,
   },
   brand: {
-    color: colors.inkText,
+    color: colors.white,
     fontSize: 19,
     fontWeight: "800",
   },
   brandSubline: {
-    color: colors.inkMuted,
+    color: "rgba(255,255,255,0.78)",
     fontSize: 13,
     fontWeight: "600",
     marginTop: 2,
   },
   hero: {
-    paddingTop: 26,
-  },
-  heroMedia: {
-    alignItems: "center",
-    alignSelf: "center",
-    backgroundColor: colors.inkBg,
-    borderRadius: 8,
-    height: 216,
-    justifyContent: "center",
-    marginBottom: 26,
-    overflow: "hidden",
+    minHeight: 500,
     width: "100%",
   },
-  radarOuter: {
-    alignItems: "center",
-    borderColor: "rgba(255,255,255,0.18)",
-    borderRadius: 120,
+  heroImage: {
+    backgroundColor: colors.inkBg,
+  },
+  heroShade: {
+    backgroundColor: "rgba(11,18,32,0.48)",
+    flex: 1,
+    justifyContent: "space-between",
+    paddingBottom: 34,
+  },
+  heroCopy: {
+    paddingHorizontal: spacing.pageX,
+  },
+  kickerPill: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(255,255,255,0.88)",
+    borderColor: "rgba(37,99,235,0.22)",
+    borderRadius: 8,
     borderWidth: 1,
-    height: 186,
-    justifyContent: "center",
-    width: 186,
-  },
-  radarMiddle: {
-    alignItems: "center",
-    borderColor: "rgba(37,99,235,0.58)",
-    borderRadius: 80,
-    borderWidth: 2,
-    height: 132,
-    justifyContent: "center",
-    width: 132,
-  },
-  radarCore: {
-    alignItems: "center",
-    backgroundColor: colors.brandPrimary,
-    borderColor: "rgba(255,255,255,0.7)",
-    borderRadius: 8,
-    borderWidth: 2,
-    height: 66,
-    justifyContent: "center",
-    width: 66,
-  },
-  radarQr: {
-    color: colors.white,
-    fontSize: 20,
-    fontWeight: "900",
-  },
-  arBadge: {
-    backgroundColor: colors.brandAccent,
-    borderRadius: 8,
-    bottom: 18,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 8,
-    position: "absolute",
-    right: 18,
-  },
-  arBadgeText: {
-    color: colors.white,
-    fontSize: 12,
-    fontWeight: "800",
   },
   kicker: {
     color: colors.brandPrimary,
@@ -215,88 +191,143 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   title: {
-    color: colors.inkText,
-    fontSize: 34,
+    color: colors.white,
+    fontSize: 38,
     fontWeight: "900",
-    lineHeight: 40,
-    marginTop: 10,
+    lineHeight: 44,
+    marginTop: 16,
+    maxWidth: 340,
   },
   lead: {
-    color: colors.inkMuted,
+    color: "rgba(255,255,255,0.86)",
     fontSize: 16,
     lineHeight: 25,
-    marginTop: 16,
+    marginTop: 14,
+    maxWidth: 350,
   },
-  notice: {
-    backgroundColor: colors.white,
-    borderColor: "rgba(249,115,22,0.28)",
-    borderRadius: 8,
-    borderWidth: 1,
-    marginTop: 22,
-    padding: 16,
-  },
-  noticeTitle: {
-    color: colors.brandAccent,
-    fontSize: 14,
-    fontWeight: "900",
-  },
-  noticeText: {
-    color: colors.inkMuted,
-    fontSize: 14,
-    lineHeight: 22,
-    marginTop: 8,
-  },
-  points: {
-    gap: 12,
-    marginTop: 18,
-  },
-  pointRow: {
-    alignItems: "flex-start",
+  summary: {
     backgroundColor: colors.white,
     borderColor: colors.inkBorder,
     borderRadius: 8,
     borderWidth: 1,
-    flexDirection: "row",
-    gap: 13,
-    padding: 15,
+    marginHorizontal: spacing.pageX,
+    marginTop: -26,
+    padding: 18,
+    ...Platform.select({
+      android: { elevation: 8 },
+      ios: {
+        shadowColor: "#0F172A",
+        shadowOffset: { height: 12, width: 0 },
+        shadowOpacity: 0.1,
+        shadowRadius: 24,
+      },
+    }),
   },
-  pointIndex: {
+  summaryEyebrow: {
+    color: colors.brandAccent,
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  summaryTitle: {
+    color: colors.inkText,
+    fontSize: 22,
+    fontWeight: "900",
+    lineHeight: 28,
+    marginTop: 8,
+  },
+  summaryText: {
+    color: colors.inkMuted,
+    fontSize: 15,
+    lineHeight: 24,
+    marginTop: 10,
+  },
+  pointsGrid: {
+    gap: 12,
+    marginHorizontal: spacing.pageX,
+    marginTop: 18,
+  },
+  pointCard: {
+    backgroundColor: colors.white,
+    borderColor: colors.inkBorder,
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: 16,
+  },
+  pointIcon: {
     alignItems: "center",
     backgroundColor: "rgba(37,99,235,0.1)",
     borderRadius: 8,
-    height: 36,
+    height: 38,
     justifyContent: "center",
-    width: 36,
+    width: 38,
   },
-  pointIndexAccent: {
+  pointIconAccent: {
     backgroundColor: "rgba(249,115,22,0.13)",
   },
-  pointIndexText: {
+  pointIconText: {
     color: colors.brandPrimary,
     fontSize: 15,
     fontWeight: "900",
   },
-  pointIndexTextAccent: {
+  pointIconTextAccent: {
     color: colors.brandAccent,
-  },
-  pointContent: {
-    flex: 1,
   },
   pointTitle: {
     color: colors.inkText,
-    fontSize: 15,
-    fontWeight: "800",
+    fontSize: 17,
+    fontWeight: "900",
+    marginTop: 12,
   },
   pointText: {
     color: colors.inkMuted,
     fontSize: 14,
-    lineHeight: 21,
-    marginTop: 5,
+    lineHeight: 22,
+    marginTop: 6,
+  },
+  notice: {
+    backgroundColor: "#FFF7ED",
+    borderColor: "rgba(249,115,22,0.28)",
+    borderRadius: 8,
+    borderWidth: 1,
+    marginHorizontal: spacing.pageX,
+    marginTop: 22,
+    padding: 18,
+  },
+  noticeHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  noticeLabel: {
+    color: colors.brandAccent,
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  noticeBadge: {
+    backgroundColor: colors.white,
+    borderColor: "rgba(249,115,22,0.28)",
+    borderRadius: 8,
+    borderWidth: 1,
+    color: colors.brandAccent,
+    fontSize: 11,
+    fontWeight: "900",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    textTransform: "uppercase",
+  },
+  noticeText: {
+    color: colors.inkText,
+    fontSize: 14,
+    lineHeight: 22,
+    marginTop: 12,
   },
   primaryAction: {
     alignItems: "center",
     backgroundColor: colors.brandPrimary,
     borderRadius: 8,
+    marginHorizontal: spacing.pageX,
     marginTop: 22,
     paddingVertical: 15,
   },
