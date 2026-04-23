@@ -13,13 +13,19 @@ function trimTrailingSlash(value) {
   return value.replace(/\/+$/, "");
 }
 
-async function postBackendJson(path, body) {
+async function postBackendJson(path, body, options = {}) {
+  const headers = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
+
+  if (options.idToken) {
+    headers.Authorization = `Bearer ${options.idToken}`;
+  }
+
   const response = await fetch(`${backendConfig.authApiBaseUrl}${path}`, {
     method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
+    headers,
     body: JSON.stringify(body),
   });
 
@@ -48,6 +54,31 @@ export function startHunterEmailVerification(email) {
     email,
     role: "hunter",
   });
+}
+
+export function fetchHunterProfile(idToken) {
+  return postBackendJson(
+    "/api/hunter-auth/profile/me",
+    {},
+    {
+      idToken,
+    }
+  );
+}
+
+export function upsertHunterProfile({ idToken, displayName, photoURL }) {
+  return postBackendJson(
+    "/api/hunter-auth/profile/upsert",
+    {
+      role: "hunter",
+      termsAccepted: true,
+      displayName,
+      photoURL,
+    },
+    {
+      idToken,
+    }
+  );
 }
 
 export function verifyHunterEmailCode({ email, verificationId, code }) {

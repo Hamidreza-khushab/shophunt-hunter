@@ -29,7 +29,7 @@ const introPoints = [
   },
 ];
 
-export default function IntroScreen() {
+export default function IntroScreen({ onContinue }) {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView
@@ -115,8 +115,8 @@ export default function IntroScreen() {
           </Text>
         </View>
 
-        <Pressable style={styles.primaryAction}>
-          <Text style={styles.primaryActionText}>Weiter zur Jagd</Text>
+        <Pressable onPress={onContinue} style={styles.primaryAction}>
+          <Text style={styles.primaryActionText}>Anmelden oder registrieren</Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>

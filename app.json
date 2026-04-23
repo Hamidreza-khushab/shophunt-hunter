@@ -2,7 +2,10 @@
   "expo": {
     "name": "Shop Hunter",
     "slug": "shophunt-hunter",
-    "scheme": "shophunter",
+    "scheme": [
+      "shophunter",
+      "com.olymaris.shophunter"
+    ],
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -26,7 +29,13 @@
         }
       ],
       "expo-web-browser",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Shop Hunter verwendet deinen Standort, um Spawns und Kampagnen in deiner Nähe auf der Karte anzuzeigen."
+        }
+      ]
     ],
     "ios": {
       "supportsTablet": true,
@@ -39,7 +48,11 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#2563EB"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
     },
     "androidNavigationBar": {
       "visible": "immersive",

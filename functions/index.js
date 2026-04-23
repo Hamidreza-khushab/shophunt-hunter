@@ -103,7 +103,7 @@ function applyCors(req, res) {
   }
 
   res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.set("Access-Control-Allow-Headers", "Content-Type");
+  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
   res.set("Access-Control-Max-Age", "3600");
 
   if (req.method === "OPTIONS") {
@@ -486,6 +486,185 @@ async function verifyEmailCode(body) {
   };
 }
 
+function getBearerToken(req) {
+  const header = String(req.get("authorization") || "").trim();
+
+  if (!header.toLowerCase().startsWith("bearer ")) {
+    throw createHttpError(401, "AUTH_TOKEN_REQUIRED", "Die Anmeldung ist erforderlich.");
+  }
+
+  const token = header.slice(7).trim();
+
+  if (!token) {
+    throw createHttpError(401, "AUTH_TOKEN_REQUIRED", "Die Anmeldung ist erforderlich.");
+  }
+
+  return token;
+}
+
+async function getDecodedAuthToken(req) {
+  try {
+    return await admin.auth().verifyIdToken(getBearerToken(req));
+  } catch {
+    throw createHttpError(401, "AUTH_TOKEN_INVALID", "Die Sitzung ist abgelaufen. Bitte melde dich erneut an.");
+  }
+}
+
+function cleanProfileString(value, maxLength = 120) {
+  return String(value || "").trim().slice(0, maxLength);
+}
+
+async function assertRecentPasswordVerification(email) {
+  const snapshot = await verificationRef(email).get();
+  const data = snapshot.exists ? snapshot.data() || {} : {};
+
+  if (
+    data.verified !== true ||
+    data.role !== "hunter" ||
+    getMillis(data.expiresAt) <= Date.now()
+  ) {
+    throw createHttpError(403, "EMAIL_VERIFICATION_REQUIRED", "Die E-Mail-Adresse wurde nicht bestätigt.");
+  }
+}
+
+function getAuthProvider(decodedToken) {
+  return String(decodedToken.firebase?.sign_in_provider || "").trim();
+}
+
+function publicHunterProfile(profile) {
+  return {
+    uid: profile.uid,
+    email: profile.email,
+    displayName: profile.displayName || "",
+    photoURL: profile.photoURL || null,
+    role: profile.role,
+    allowedApps: profile.allowedApps || ["hunter"],
+    accountStatus: profile.accountStatus || "active",
+    authProvider: profile.authProvider,
+  };
+}
+
+async function readHunterProfileForRequest(req) {
+  const decodedToken = await getDecodedAuthToken(req);
+  const profileSnapshot = await db.collection("users").doc(decodedToken.uid).get();
+
+  if (!profileSnapshot.exists) {
+    throw createHttpError(403, "HUNTER_PROFILE_NOT_FOUND", "Dieses Konto ist für die Hunter-App nicht zugelassen.");
+  }
+
+  const profile = profileSnapshot.data() || {};
+
+  if (profile.role !== "hunter") {
+    throw createHttpError(403, "ROLE_NOT_ALLOWED", "Dieses Konto ist für die Hunter-App nicht zugelassen.");
+  }
+
+  if (profile.accountStatus === "blocked") {
+    throw createHttpError(403, "ACCOUNT_BLOCKED", "Der Zugriff auf dieses Konto wurde gesperrt.");
+  }
+
+  await db.collection("users").doc(decodedToken.uid).set(
+    {
+      lastLoginAt: fieldValue.serverTimestamp(),
+      updatedAt: fieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+
+  return {
+    ok: true,
+    profile: publicHunterProfile(profile),
+  };
+}
+
+async function upsertHunterProfile(body, req) {
+  validateHunterRole(body.role);
+
+  const decodedToken = await getDecodedAuthToken(req);
+  const uid = decodedToken.uid;
+  const email = validateSecureEmail(decodedToken.email);
+  const authProvider = getAuthProvider(decodedToken);
+
+  if (!["password", "google.com"].includes(authProvider)) {
+    throw createHttpError(403, "AUTH_PROVIDER_NOT_ALLOWED", "Diese Anmeldemethode ist für Hunter nicht erlaubt.");
+  }
+
+  if (authProvider === "password") {
+    await assertRecentPasswordVerification(email);
+  }
+
+  if (authProvider === "google.com" && decodedToken.email_verified !== true) {
+    throw createHttpError(403, "EMAIL_VERIFICATION_REQUIRED", "Die Google-E-Mail-Adresse wurde nicht bestätigt.");
+  }
+
+  if (body.termsAccepted !== true) {
+    throw createHttpError(400, "TERMS_REQUIRED", "Für die Registrierung musst du die Nutzungsbedingungen akzeptieren.");
+  }
+
+  const profileRef = db.collection("users").doc(uid);
+  const profileSnapshot = await profileRef.get();
+
+  if (profileSnapshot.exists) {
+    const existingProfile = profileSnapshot.data() || {};
+
+    if (existingProfile.role !== "hunter") {
+      throw createHttpError(403, "ROLE_NOT_ALLOWED", "Dieses Konto ist für die Hunter-App nicht zugelassen.");
+    }
+
+    await profileRef.set(
+      {
+        displayName: cleanProfileString(body.displayName || existingProfile.displayName),
+        photoURL: body.photoURL ? cleanProfileString(body.photoURL, 500) : existingProfile.photoURL || null,
+        lastLoginAt: fieldValue.serverTimestamp(),
+        updatedAt: fieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    return {
+      ok: true,
+      created: false,
+      profile: publicHunterProfile(existingProfile),
+    };
+  }
+
+  const profile = {
+    uid,
+    email,
+    displayName: cleanProfileString(body.displayName),
+    photoURL: body.photoURL ? cleanProfileString(body.photoURL, 500) : null,
+    role: "hunter",
+    allowedApps: ["hunter"],
+    accountStatus: "active",
+    emailVerified: true,
+    emailVerifiedBy: authProvider === "google.com" ? "google" : "six_digit_code",
+    authProvider,
+    termsAccepted: true,
+    termsAcceptedAt: fieldValue.serverTimestamp(),
+    createdAt: fieldValue.serverTimestamp(),
+    updatedAt: fieldValue.serverTimestamp(),
+    lastLoginAt: fieldValue.serverTimestamp(),
+  };
+
+  await profileRef.set(profile);
+
+  if (authProvider === "password") {
+    await verificationRef(email).set(
+      {
+        consumedAt: fieldValue.serverTimestamp(),
+        consumedByUid: uid,
+        updatedAt: fieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  }
+
+  return {
+    ok: true,
+    created: true,
+    profile: publicHunterProfile(profile),
+  };
+}
+
 async function routeRequest(req) {
   const path = getRequestPath(req);
   const body = getRequestBody(req);
@@ -500,6 +679,14 @@ async function routeRequest(req) {
 
   if (path.endsWith("/api/hunter-auth/email-verification/verify")) {
     return verifyEmailCode(body);
+  }
+
+  if (path.endsWith("/api/hunter-auth/profile/me")) {
+    return readHunterProfileForRequest(req);
+  }
+
+  if (path.endsWith("/api/hunter-auth/profile/upsert")) {
+    return upsertHunterProfile(body, req);
   }
 
   throw createHttpError(404, "NOT_FOUND", "Der Endpunkt wurde nicht gefunden.");

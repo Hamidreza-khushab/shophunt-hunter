@@ -9,16 +9,11 @@ import {
   signOut,
   updateProfile,
 } from "firebase/auth";
+import { firebaseAuth, hasFirebaseConfig } from "./firebase";
 import {
-  doc,
-  getDoc,
-  serverTimestamp,
-  setDoc,
-  updateDoc,
-} from "firebase/firestore";
-import { firebaseAuth, firestoreDb, hasFirebaseConfig } from "./firebase";
-import {
+  fetchHunterProfile,
   startHunterEmailVerification,
+  upsertHunterProfile,
   verifyHunterEmailCode,
 } from "./backend";
 
@@ -41,7 +36,7 @@ export class AuthFlowError extends Error {
 }
 
 export function normalizeEmail(email) {
-  return email.trim().toLowerCase();
+  return String(email || "").trim().toLowerCase();
 }
 
 export function validateSecureEmail(email) {
@@ -88,7 +83,7 @@ export function validatePassword(password) {
 }
 
 function requireFirebaseServices() {
-  if (!hasFirebaseConfig || !firebaseAuth || !firestoreDb) {
+  if (!hasFirebaseConfig || !firebaseAuth) {
     throw new AuthFlowError(
       "auth/missing-config",
       "Die Firebase-Konfiguration ist unvollständig."
@@ -96,18 +91,14 @@ function requireFirebaseServices() {
   }
 }
 
-function hunterProfileRef(uid) {
-  return doc(firestoreDb, "users", uid);
-}
-
-export async function getHunterProfile(uid) {
+export async function getHunterProfile(user) {
   requireFirebaseServices();
-  const profileSnapshot = await getDoc(hunterProfileRef(uid));
-  return profileSnapshot.exists() ? profileSnapshot.data() : null;
+  const result = await fetchHunterProfile(await user.getIdToken());
+  return result.profile || null;
 }
 
 export async function assertHunterAccess(user) {
-  const profile = await getHunterProfile(user.uid);
+  const profile = await getHunterProfile(user);
 
   if (!profile || profile.role !== HUNTER_ROLE) {
     throw new AuthFlowError(
@@ -129,45 +120,13 @@ export async function assertHunterAccess(user) {
 async function createHunterProfile(user, options) {
   requireFirebaseServices();
 
-  const profileRef = hunterProfileRef(user.uid);
-  const profileSnapshot = await getDoc(profileRef);
-
-  if (profileSnapshot.exists()) {
-    const profile = profileSnapshot.data();
-    if (profile.role !== HUNTER_ROLE) {
-      throw new AuthFlowError(
-        "auth/not-hunter",
-        "Diese E-Mail-Adresse wurde bereits für eine andere Rolle registriert."
-      );
-    }
-
-    await updateDoc(profileRef, {
-      lastLoginAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-    return profile;
-  }
-
-  const profile = {
-    uid: user.uid,
-    email: normalizeEmail(user.email || options.email),
+  const result = await upsertHunterProfile({
+    idToken: await user.getIdToken(true),
     displayName: options.displayName || user.displayName || "",
     photoURL: user.photoURL || null,
-    role: HUNTER_ROLE,
-    allowedApps: [HUNTER_ROLE],
-    accountStatus: "active",
-    emailVerified: true,
-    emailVerifiedBy: options.emailVerifiedBy,
-    authProvider: options.authProvider,
-    termsAccepted: true,
-    termsAcceptedAt: serverTimestamp(),
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-    lastLoginAt: serverTimestamp(),
-  };
+  });
 
-  await setDoc(profileRef, profile);
-  return profile;
+  return result.profile || null;
 }
 
 async function emailExists(email) {
@@ -247,10 +206,7 @@ export async function completeEmailHunterRegistration({
     }
 
     await createHunterProfile(credential.user, {
-      email: normalizedEmail,
       displayName: displayName.trim(),
-      authProvider: "password",
-      emailVerifiedBy: "six_digit_code",
     });
   } catch (error) {
     await deleteUser(credential.user).catch(() => {});
@@ -321,7 +277,10 @@ export async function signInHunterWithGoogle({
   }
 
   const googleProfile = accessToken ? await getGoogleProfile(accessToken) : {};
-  const email = googleProfile.email ? validateSecureEmail(googleProfile.email) : "";
+  if (googleProfile.email) {
+    validateSecureEmail(googleProfile.email);
+  }
+
   const credential = GoogleAuthProvider.credential(idToken, accessToken);
   const userCredential = await signInWithCredential(firebaseAuth, credential);
   const additionalInfo = getAdditionalUserInfo(userCredential);
@@ -350,10 +309,7 @@ export async function signInHunterWithGoogle({
     }
 
     await createHunterProfile(userCredential.user, {
-      email,
       displayName: googleProfile.name || userCredential.user.displayName || "",
-      authProvider: "google.com",
-      emailVerifiedBy: "google",
     });
 
     return userCredential.user;

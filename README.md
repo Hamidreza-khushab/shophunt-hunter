@@ -19,6 +19,7 @@ Die QR-Identität in dieser App ist kein gedrucktes Wandlabel. Sie steht für ei
 Erstelle `.env` aus `.env.example` und fülle sie mit den öffentlichen Web-/Backend-Werten aus dem bestehenden ShopHunt-Projekt. Verwende dieselben Firebase-Werte wie im Dashboard, aber mit dem Präfix `EXPO_PUBLIC_` statt `NEXT_PUBLIC_`.
 
 Die Google-Anmeldung benötigt die plattformspezifischen OAuth-Client-IDs in `.env`.
+Für die Android-Karte benötigt der native Build zusätzlich `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` mit einem Google Maps SDK for Android API-Key. Ohne diesen Key kann die Standortfreigabe funktionieren, aber die Kartenkacheln können im Android-Build leer bleiben.
 
 Die E-Mail-Registrierung nutzt die Firebase Function unter:
 
@@ -54,12 +55,60 @@ Danach deployen:
 ```sh
 npm --prefix functions install
 firebase use shophunt-484e8
-firebase deploy --only firestore:rules,functions:hunterAuth
+firebase deploy --only firestore:rules,functions:hunter-auth:hunterAuth
 ```
 
 ## EAS
 
+Keep real environment values out of `eas.json`. Local development reads `.env`; cloud builds read the selected EAS environment configured by each build profile.
+
+Push `.env` to EAS before building:
+
 ```sh
-npm run eas:android
-npm run eas:ios
+npx eas-cli@latest env:push development --path .env
+npx eas-cli@latest env:push preview --path .env
+npx eas-cli@latest env:push production --path .env
+```
+
+Preview Android APK:
+
+```sh
+npx eas-cli@latest build --profile preview --platform android
+```
+
+Preview iOS build:
+
+```sh
+npx eas-cli@latest build --profile preview --platform ios
+```
+
+Preview build for Android and iOS:
+
+```sh
+npx eas-cli@latest build --profile preview --platform all
+```
+
+Production Android build:
+
+```sh
+npx eas-cli@latest build --profile production --platform android
+```
+
+Production iOS build:
+
+```sh
+npx eas-cli@latest build --profile production --platform ios
+```
+
+Production build for Android and iOS:
+
+```sh
+npx eas-cli@latest build --profile production --platform all
+```
+
+## Debugging
+
+```sh
+adb logcat -c
+adb logcat -v time AndroidRuntime:E ReactNativeJS:V ReactNative:V Expo:E '*:S' | Tee-Object crash-log.txt
 ```

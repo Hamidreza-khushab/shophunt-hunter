@@ -7,6 +7,7 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import { assertHunterAccess, getAuthErrorMessage } from "./src/lib/auth";
 import { firebaseAuth } from "./src/lib/firebase";
 import AuthScreen from "./src/screens/AuthScreen";
+import HunterHomeScreen from "./src/screens/HunterHomeScreen";
 import IntroScreen from "./src/screens/IntroScreen";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -22,6 +23,7 @@ export default function App() {
     profile: null,
     user: null,
   });
+  const [showAuthScreen, setShowAuthScreen] = useState(false);
 
   const appIsReady = !authState.checking;
 
@@ -101,6 +103,13 @@ export default function App() {
     }
   }, [appIsReady]);
 
+  const handleLogout = useCallback(async () => {
+    setShowAuthScreen(false);
+    if (firebaseAuth) {
+      await signOut(firebaseAuth).catch(() => {});
+    }
+  }, []);
+
   if (!appIsReady) {
     return null;
   }
@@ -109,8 +118,12 @@ export default function App() {
     <View style={styles.root} onLayout={handleRootLayout}>
       <StatusBar hidden style="light" />
       {authState.user ? (
-        <IntroScreen />
-      ) : (
+        <HunterHomeScreen
+          onLogout={handleLogout}
+          profile={authState.profile}
+          user={authState.user}
+        />
+      ) : showAuthScreen || authState.message ? (
         <AuthScreen
           authMessage={authState.message}
           onClearAuthMessage={() =>
@@ -120,6 +133,8 @@ export default function App() {
             }))
           }
         />
+      ) : (
+        <IntroScreen onContinue={() => setShowAuthScreen(true)} />
       )}
     </View>
   );
