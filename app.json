@@ -28,7 +28,7 @@
           "backgroundColor": "#F8FBFF"
         }
       ],
-      "expo-web-browser",
+      "@react-native-google-signin/google-signin",
       "expo-secure-store",
       [
         "expo-location",
@@ -40,10 +40,12 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.olymaris.shophunter",
-      "requireFullScreen": true
+      "requireFullScreen": true,
+      "googleServicesFile": "./GoogleService-Info.plist"
     },
     "android": {
       "package": "com.olymaris.shophunter",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#2563EB"

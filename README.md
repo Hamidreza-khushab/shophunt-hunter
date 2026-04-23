@@ -18,7 +18,8 @@ Die QR-Identität in dieser App ist kein gedrucktes Wandlabel. Sie steht für ei
 
 Erstelle `.env` aus `.env.example` und fülle sie mit den öffentlichen Web-/Backend-Werten aus dem bestehenden ShopHunt-Projekt. Verwende dieselben Firebase-Werte wie im Dashboard, aber mit dem Präfix `EXPO_PUBLIC_` statt `NEXT_PUBLIC_`.
 
-Die Google-Anmeldung benötigt die plattformspezifischen OAuth-Client-IDs in `.env`.
+Die Google-Anmeldung nutzt native Google Sign-In fuer Expo Development-/Preview-Builds. In `.env` wird dafuer `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` verwendet; Android OAuth Client IDs gehoeren nur in Firebase/Google Cloud mit den passenden SHA-1 Fingerprints und werden nicht im JavaScript-Loginflow verwendet.
+Firebase Authentication muss den Google provider aktiviert haben. `google-services.json` und `GoogleService-Info.plist` muessen im Projekt liegen, weil `app.json` sie fuer den native Build referenziert.
 Für die Android-Karte benötigt der native Build zusätzlich `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` mit einem Google Maps SDK for Android API-Key. Ohne diesen Key kann die Standortfreigabe funktionieren, aber die Kartenkacheln können im Android-Build leer bleiben.
 
 Die E-Mail-Registrierung nutzt die Firebase Function unter:

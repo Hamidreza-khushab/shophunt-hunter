@@ -1,6 +1,10 @@
-import * as Google from "expo-auth-session/providers/google";
-import * as WebBrowser from "expo-web-browser";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  GoogleSignin,
+  isErrorWithCode,
+  isSuccessResponse,
+  statusCodes,
+} from "@react-native-google-signin/google-signin";
+import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -26,63 +30,118 @@ import { backendConfig } from "../lib/backend";
 import { hasFirebaseConfig } from "../lib/firebase";
 import { colors, spacing } from "../theme";
 
-WebBrowser.maybeCompleteAuthSession();
-
 const googleClientIds = {
   webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
   iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-  androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
 };
 
-function getPlatformGoogleClientId() {
-  return Platform.select({
-    ios: googleClientIds.iosClientId || googleClientIds.webClientId,
-    android: googleClientIds.androidClientId || googleClientIds.webClientId,
-    default: googleClientIds.webClientId,
-  });
+let isGoogleSignInConfigured = false;
+
+function configureGoogleSignIn() {
+  if (!googleClientIds.webClientId) {
+    return false;
+  }
+
+  if (!isGoogleSignInConfigured) {
+    const config = {
+      webClientId: googleClientIds.webClientId,
+      offlineAccess: false,
+      profileImageSize: 120,
+    };
+
+    if (googleClientIds.iosClientId) {
+      config.iosClientId = googleClientIds.iosClientId;
+    }
+
+    GoogleSignin.configure(config);
+    isGoogleSignInConfigured = true;
+  }
+
+  return true;
+}
+
+function getGoogleSignInErrorMessage(error) {
+  if (!isErrorWithCode(error)) {
+    return "Die Anmeldung mit Google ist fehlgeschlagen.";
+  }
+
+  switch (error.code) {
+    case statusCodes.IN_PROGRESS:
+      return "Die Google-Anmeldung laeuft bereits.";
+    case statusCodes.PLAY_SERVICES_NOT_AVAILABLE:
+      return "Google Play-Dienste sind auf diesem Geraet nicht verfuegbar oder veraltet.";
+    default:
+      return "Die Anmeldung mit Google ist fehlgeschlagen.";
+  }
+}
+
+async function getGoogleSignInTokens(signInResponse) {
+  const tokens = await GoogleSignin.getTokens().catch(() => null);
+
+  return {
+    accessToken: tokens?.accessToken,
+    idToken: tokens?.idToken || signInResponse.data?.idToken,
+  };
 }
 
 function GoogleAuthButton({ disabled, mode, onError, onTokens }) {
-  const platformClientId = getPlatformGoogleClientId();
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    clientId: platformClientId,
-    webClientId: googleClientIds.webClientId,
-    iosClientId: googleClientIds.iosClientId,
-    androidClientId: googleClientIds.androidClientId,
-    scopes: ["openid", "profile", "email"],
-    selectAccount: true,
-  });
+  const googleConfigured = useMemo(() => configureGoogleSignIn(), []);
+  const [signingIn, setSigningIn] = useState(false);
+  const isDisabled = disabled || signingIn || !googleConfigured;
 
-  useEffect(() => {
-    if (!response) {
+  const handlePress = useCallback(async () => {
+    if (!googleConfigured) {
+      onError("Die Google Web Client ID ist nicht konfiguriert.");
       return;
     }
 
-    if (response.type === "success") {
-      onTokens({
-        accessToken:
-          response.authentication?.accessToken || response.params.access_token,
-        idToken: response.authentication?.idToken || response.params.id_token,
+    setSigningIn(true);
+
+    try {
+      await GoogleSignin.hasPlayServices({
+        showPlayServicesUpdateDialog: true,
       });
-      return;
-    }
+      const signInResponse = await GoogleSignin.signIn();
 
-    if (response.type === "error") {
-      onError("Die Anmeldung mit Google ist fehlgeschlagen.");
+      if (!isSuccessResponse(signInResponse)) {
+        return;
+      }
+
+      const tokens = await getGoogleSignInTokens(signInResponse);
+      if (!tokens.idToken) {
+        onError("Es wurde kein Google-ID-Token empfangen.");
+        return;
+      }
+
+      await onTokens(tokens);
+    } catch (error) {
+      if (
+        isErrorWithCode(error) &&
+        error.code === statusCodes.SIGN_IN_CANCELLED
+      ) {
+        return;
+      }
+      onError(getGoogleSignInErrorMessage(error));
+    } finally {
+      setSigningIn(false);
     }
-  }, [onError, onTokens, response]);
+  }, [googleConfigured, onError, onTokens]);
 
   return (
     <Pressable
-      disabled={disabled || !request}
-      onPress={() => promptAsync()}
+      disabled={isDisabled}
+      onPress={handlePress}
       style={({ pressed }) => [
         styles.googleButton,
         pressed ? styles.buttonPressed : null,
-        disabled || !request ? styles.disabledButton : null,
+        isDisabled ? styles.disabledButton : null,
       ]}
     >
-      <Text style={styles.googleMark}>G</Text>
+      {signingIn ? (
+        <ActivityIndicator color={colors.primary} size="small" />
+      ) : (
+        <Text style={styles.googleMark}>G</Text>
+      )}
       <Text style={styles.googleButtonText}>
         {mode === "login"
           ? "Mit Google anmelden"
@@ -90,6 +149,10 @@ function GoogleAuthButton({ disabled, mode, onError, onTokens }) {
       </Text>
     </Pressable>
   );
+}
+
+function isGoogleSignInAvailable() {
+  return Boolean(googleClientIds.webClientId);
 }
 
 function Feedback({ error, info }) {
@@ -118,8 +181,7 @@ export default function AuthScreen({ authMessage, onClearAuthMessage }) {
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
 
-  const platformGoogleClientId = getPlatformGoogleClientId();
-  const googleAvailable = Boolean(platformGoogleClientId);
+  const googleAvailable = isGoogleSignInAvailable();
   const isRegister = mode === "register";
   const isVerifyingEmail = Boolean(pendingRegistration);
 

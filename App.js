@@ -10,6 +10,32 @@ import AuthScreen from "./src/screens/AuthScreen";
 import HunterHomeScreen from "./src/screens/HunterHomeScreen";
 import IntroScreen from "./src/screens/IntroScreen";
 
+const transientProfileMissingCode = "HUNTER_PROFILE_NOT_FOUND";
+
+function waitForProfileRetry(delayMs) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
+}
+
+async function assertHunterAccessAfterRegistration(user) {
+  const maxAttempts = 5;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await assertHunterAccess(user);
+    } catch (error) {
+      if (error?.code !== transientProfileMissingCode || attempt === maxAttempts) {
+        throw error;
+      }
+
+      await waitForProfileRetry(450);
+    }
+  }
+
+  return assertHunterAccess(user);
+}
+
 SplashScreen.preventAutoHideAsync().catch(() => {});
 SplashScreen.setOptions({
   duration: 350,
@@ -69,7 +95,7 @@ export default function App() {
       }
 
       try {
-        const profile = await assertHunterAccess(user);
+        const profile = await assertHunterAccessAfterRegistration(user);
         if (isMounted) {
           setAuthState({
             checking: false,

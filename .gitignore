@@ -43,5 +43,3 @@ crash-log*.txt
 # generated native folders
 /ios
 /android
-/google-services.json
-/GoogleService-Info.plist

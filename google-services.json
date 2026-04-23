@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "571927379300",
+    "project_id": "shophunt-484e8",
+    "storage_bucket": "shophunt-484e8.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:571927379300:android:09c17d1041c6a28d630e71",
+        "android_client_info": {
+          "package_name": "com.olymaris.shophunter"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "571927379300-7dv8fmbibnjo627cjftm0uqltpn97n6n.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.olymaris.shophunter",
+            "certificate_hash": "3333e6d84fbb00434235f9d4dae08f934422f6a6"
+          }
+        },
+        {
+          "client_id": "571927379300-1pcj1afph6mntsk7urdgac9tnann1jf9.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB4tepRPyGN0Euj1qVzK9l6leJs_NSEF9o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "571927379300-1pcj1afph6mntsk7urdgac9tnann1jf9.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "571927379300-du3ld1qtk8gnolnue3jra61vpe8ceuj7.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.olymaris.shophunter"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
