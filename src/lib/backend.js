@@ -66,6 +66,41 @@ export function fetchHunterProfile(idToken) {
   );
 }
 
+export function fetchHunterCampaigns({ idToken, coords }) {
+  const center =
+    coords &&
+    Number.isFinite(coords.latitude) &&
+    Number.isFinite(coords.longitude)
+      ? {
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        }
+      : null;
+
+  return postBackendJson(
+    "/api/hunter-auth/campaigns/nearby",
+    {
+      center,
+      maxDistanceMeters: 25000,
+    },
+    {
+      idToken,
+    }
+  );
+}
+
+export function fetchPublicHunterStories(idToken) {
+  return postBackendJson(
+    "/api/hunter-auth/stories/public",
+    {
+      limit: 30,
+    },
+    {
+      idToken,
+    }
+  );
+}
+
 export function upsertHunterProfile({ idToken, displayName, photoURL }) {
   return postBackendJson(
     "/api/hunter-auth/profile/upsert",

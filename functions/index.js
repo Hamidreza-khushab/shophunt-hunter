@@ -21,6 +21,12 @@ const SEND_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const MAX_SENDS_PER_WINDOW = 5;
 const MAX_IP_SENDS_PER_WINDOW = 30;
 const MAX_VERIFY_ATTEMPTS = 5;
+const PUBLIC_CAMPAIGN_STATUSES = ["published", "scheduled"];
+const MAX_PUBLIC_CAMPAIGNS = 100;
+const DEFAULT_NEARBY_DISTANCE_METERS = 25000;
+const STORY_ADS_SUBCOLLECTION = "storyAds";
+const PUBLIC_STORY_STATUS = "published";
+const MAX_PUBLIC_STORIES = 30;
 
 const disposableEmailDomains = new Set([
   "10minutemail.com",
@@ -544,6 +550,312 @@ function publicHunterProfile(profile) {
   };
 }
 
+function cleanPublicString(value, maxLength = 240) {
+  return String(value || "").trim().slice(0, maxLength);
+}
+
+function normalizePublicNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function normalizeRadiusMeters(value) {
+  const radius = Number.parseInt(String(value || 40), 10);
+
+  if (!Number.isFinite(radius) || radius < 1) {
+    return 40;
+  }
+
+  return Math.min(500, Math.max(10, radius));
+}
+
+function normalizeCampaignPoint(value) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const latitude = normalizePublicNumber(value.latitude);
+  const longitude = normalizePublicNumber(value.longitude);
+
+  if (
+    latitude === null ||
+    longitude === null ||
+    latitude < -90 ||
+    latitude > 90 ||
+    longitude < -180 ||
+    longitude > 180
+  ) {
+    return null;
+  }
+
+  return {
+    latitude: Number(latitude.toFixed(7)),
+    longitude: Number(longitude.toFixed(7)),
+  };
+}
+
+function readDateMillis(value) {
+  if (!value) {
+    return null;
+  }
+
+  if (typeof value.toMillis === "function") {
+    return value.toMillis();
+  }
+
+  if (value instanceof Date) {
+    return Number.isFinite(value.getTime()) ? value.getTime() : null;
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const date = new Date(value);
+    return Number.isFinite(date.getTime()) ? date.getTime() : null;
+  }
+
+  return null;
+}
+
+function serializePublicDate(value) {
+  const millis = readDateMillis(value);
+  return millis === null ? null : new Date(millis).toISOString();
+}
+
+function isCampaignCurrentlyAvailable(data) {
+  const status = cleanPublicString(data.status, 80).toLowerCase();
+
+  if (!PUBLIC_CAMPAIGN_STATUSES.includes(status)) {
+    return false;
+  }
+
+  const schedule =
+    data.schedule && typeof data.schedule === "object" ? data.schedule : {};
+  const now = Date.now();
+  const startMs = readDateMillis(
+    schedule.startAt || data.scheduledStartAt || data.publishedAt
+  );
+  const endMs = readDateMillis(schedule.endAt || data.scheduledEndAt);
+
+  if (startMs !== null && now < startMs) {
+    return false;
+  }
+
+  if (endMs !== null && now > endMs) {
+    return false;
+  }
+
+  return true;
+}
+
+function normalizeRequestCenter(value) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  return normalizeCampaignPoint({
+    latitude: value.latitude,
+    longitude: value.longitude,
+  });
+}
+
+function toRadians(value) {
+  return (value * Math.PI) / 180;
+}
+
+function calculateDistanceMeters(first, second) {
+  if (!first || !second) {
+    return null;
+  }
+
+  const earthRadiusMeters = 6371000;
+  const latitudeDelta = toRadians(second.latitude - first.latitude);
+  const longitudeDelta = toRadians(second.longitude - first.longitude);
+  const firstLatitude = toRadians(first.latitude);
+  const secondLatitude = toRadians(second.latitude);
+  const a =
+    Math.sin(latitudeDelta / 2) * Math.sin(latitudeDelta / 2) +
+    Math.cos(firstLatitude) *
+      Math.cos(secondLatitude) *
+      Math.sin(longitudeDelta / 2) *
+      Math.sin(longitudeDelta / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return Math.round(earthRadiusMeters * c);
+}
+
+function serializePublicCampaign(doc, center) {
+  const data = doc.data() || {};
+  const huntLocation =
+    data.huntLocation && typeof data.huntLocation === "object"
+      ? data.huntLocation
+      : {};
+  const point = normalizeCampaignPoint(huntLocation.point);
+
+  if (!point || !isCampaignCurrentlyAvailable(data)) {
+    return null;
+  }
+
+  const distanceMeters = center ? calculateDistanceMeters(center, point) : null;
+  const schedule =
+    data.schedule && typeof data.schedule === "object" ? data.schedule : {};
+  const customer =
+    data.customer && typeof data.customer === "object" ? data.customer : {};
+
+  return {
+    id: doc.id,
+    path: doc.ref.path,
+    title: cleanPublicString(data.title, 120) || "ShopHunt Kampagne",
+    type: cleanPublicString(data.type, 40),
+    status: cleanPublicString(data.status, 40),
+    radiusMeters: normalizeRadiusMeters(data.radiusMeters),
+    distanceMeters,
+    location: {
+      latitude: point.latitude,
+      longitude: point.longitude,
+      label:
+        cleanPublicString(huntLocation.formattedAddress, 500) ||
+        cleanPublicString(huntLocation.displayName, 240) ||
+        cleanPublicString(customer.companyName, 240),
+    },
+    customer: {
+      companyName: cleanPublicString(customer.companyName, 240),
+    },
+    schedule: {
+      startAt: serializePublicDate(schedule.startAt || data.scheduledStartAt),
+      endAt: serializePublicDate(schedule.endAt || data.scheduledEndAt),
+    },
+  };
+}
+
+async function assertHunterProfileForRequest(req) {
+  const decodedToken = await getDecodedAuthToken(req);
+  const profileSnapshot = await db.collection("users").doc(decodedToken.uid).get();
+
+  if (!profileSnapshot.exists) {
+    throw createHttpError(403, "HUNTER_PROFILE_NOT_FOUND", "Dieses Konto ist fuer die Hunter-App nicht zugelassen.");
+  }
+
+  const profile = profileSnapshot.data() || {};
+
+  if (profile.role !== "hunter") {
+    throw createHttpError(403, "ROLE_NOT_ALLOWED", "Dieses Konto ist fuer die Hunter-App nicht zugelassen.");
+  }
+
+  if (profile.accountStatus === "blocked") {
+    throw createHttpError(403, "ACCOUNT_BLOCKED", "Der Zugriff auf dieses Konto wurde gesperrt.");
+  }
+
+  return {
+    uid: decodedToken.uid,
+    profile,
+  };
+}
+
+async function listPublicCampaignsForHunter(body, req) {
+  await assertHunterProfileForRequest(req);
+
+  const center = normalizeRequestCenter(body.center);
+  const requestedMaxDistance = Number.parseInt(
+    String(body.maxDistanceMeters || DEFAULT_NEARBY_DISTANCE_METERS),
+    10
+  );
+  const maxDistanceMeters = Number.isFinite(requestedMaxDistance)
+    ? Math.max(1000, Math.min(1000000, requestedMaxDistance))
+    : DEFAULT_NEARBY_DISTANCE_METERS;
+  const snapshot = await db.collectionGroup("campaigns").get();
+  const campaigns = snapshot.docs
+    .map((doc) => serializePublicCampaign(doc, center))
+    .filter(Boolean)
+    .filter((campaign) => {
+      if (campaign.distanceMeters === null) {
+        return true;
+      }
+
+      return campaign.distanceMeters <= maxDistanceMeters + campaign.radiusMeters;
+    })
+    .sort((first, second) => {
+      if (first.distanceMeters === null && second.distanceMeters === null) {
+        return first.title.localeCompare(second.title);
+      }
+
+      if (first.distanceMeters === null) {
+        return 1;
+      }
+
+      if (second.distanceMeters === null) {
+        return -1;
+      }
+
+      return first.distanceMeters - second.distanceMeters;
+    })
+    .slice(0, MAX_PUBLIC_CAMPAIGNS);
+
+  return {
+    ok: true,
+    campaigns,
+  };
+}
+
+function serializePublicStoryAd(doc) {
+  const data = doc.data() || {};
+  const media = data.media && typeof data.media === "object" ? data.media : {};
+  const customer =
+    data.customer && typeof data.customer === "object" ? data.customer : {};
+  const previewUrl = cleanPublicString(media.previewUrl, 1200);
+
+  if (cleanPublicString(data.status, 80).toLowerCase() !== PUBLIC_STORY_STATUS) {
+    return null;
+  }
+
+  if (!previewUrl) {
+    return null;
+  }
+
+  return {
+    id: doc.id,
+    path: doc.ref.path,
+    description: cleanPublicString(data.description, 280),
+    imageUrl: previewUrl,
+    media: {
+      previewUrl,
+      width: normalizePublicNumber(media.width),
+      height: normalizePublicNumber(media.height),
+      name: cleanPublicString(media.name, 160),
+    },
+    customer: {
+      uid: cleanPublicString(data.customerUid || customer.uid, 160),
+      companyName:
+        cleanPublicString(customer.companyName, 80) ||
+        cleanPublicString(customer.fullName, 80) ||
+        "Shop",
+    },
+    publishedAt: serializePublicDate(data.publishedAt),
+  };
+}
+
+async function listPublicStoryAdsForHunter(body, req) {
+  await assertHunterProfileForRequest(req);
+
+  const requestedLimit = Number.parseInt(String(body.limit || MAX_PUBLIC_STORIES), 10);
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.max(1, Math.min(MAX_PUBLIC_STORIES, requestedLimit))
+    : MAX_PUBLIC_STORIES;
+  const snapshot = await db.collectionGroup(STORY_ADS_SUBCOLLECTION).get();
+  const stories = snapshot.docs
+    .map(serializePublicStoryAd)
+    .filter(Boolean)
+    .sort((first, second) => {
+      const firstTime = new Date(first.publishedAt || 0).getTime();
+      const secondTime = new Date(second.publishedAt || 0).getTime();
+      return secondTime - firstTime;
+    })
+    .slice(0, limit);
+
+  return {
+    ok: true,
+    stories,
+  };
+}
+
 async function readHunterProfileForRequest(req) {
   const decodedToken = await getDecodedAuthToken(req);
   const profileSnapshot = await db.collection("users").doc(decodedToken.uid).get();
@@ -687,6 +999,14 @@ async function routeRequest(req) {
 
   if (path.endsWith("/api/hunter-auth/profile/upsert")) {
     return upsertHunterProfile(body, req);
+  }
+
+  if (path.endsWith("/api/hunter-auth/campaigns/nearby")) {
+    return listPublicCampaignsForHunter(body, req);
+  }
+
+  if (path.endsWith("/api/hunter-auth/stories/public")) {
+    return listPublicStoryAdsForHunter(body, req);
   }
 
   throw createHttpError(404, "NOT_FOUND", "Der Endpunkt wurde nicht gefunden.");
