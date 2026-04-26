@@ -964,7 +964,7 @@ function buildNearbyRecombeeFilter(center, maxDistanceMeters) {
     return null;
   }
 
-  return `earth_distance('latitude', 'longitude', ${latitude}, ${longitude}) <= ${radius} + 'radius_meters'`;
+  return `earth_distance('latitude', 'longitude', ${latitude}, ${longitude}) < ${radius}`;
 }
 
 function extractRecommendationItemId(recommendation) {
@@ -1109,10 +1109,13 @@ async function listPublicCampaignsForHunter(body, req) {
     ? Math.max(1000, Math.min(1000000, requestedMaxDistance))
     : DEFAULT_NEARBY_DISTANCE_METERS;
   const snapshot = await db.collectionGroup("campaigns").get();
-  const availableCampaigns = snapshot.docs
-    .map((doc) => serializePublicCampaign(doc, center))
-    .filter(Boolean)
-    .filter((campaign) => {
+  const campaignEntries = snapshot.docs
+    .map((doc) => ({
+      campaign: serializePublicCampaign(doc, center),
+      doc,
+    }))
+    .filter((entry) => Boolean(entry.campaign))
+    .filter(({ campaign }) => {
       if (campaign.distanceMeters === null) {
         return true;
       }
@@ -1120,20 +1123,25 @@ async function listPublicCampaignsForHunter(body, req) {
       return campaign.distanceMeters <= maxDistanceMeters + campaign.radiusMeters;
     })
     .sort((first, second) => {
-      if (first.distanceMeters === null && second.distanceMeters === null) {
-        return first.title.localeCompare(second.title);
+      if (
+        first.campaign.distanceMeters === null &&
+        second.campaign.distanceMeters === null
+      ) {
+        return first.campaign.title.localeCompare(second.campaign.title);
       }
 
-      if (first.distanceMeters === null) {
+      if (first.campaign.distanceMeters === null) {
         return 1;
       }
 
-      if (second.distanceMeters === null) {
+      if (second.campaign.distanceMeters === null) {
         return -1;
       }
 
-      return first.distanceMeters - second.distanceMeters;
-    })
+      return first.campaign.distanceMeters - second.campaign.distanceMeters;
+    });
+  const availableCampaigns = campaignEntries.map((entry) => entry.campaign);
+  const availableCampaignDocs = campaignEntries.map((entry) => entry.doc);
   const campaigns = availableCampaigns.slice(0, MAX_PUBLIC_CAMPAIGNS);
 
   const campaignsById = new Map(
@@ -1145,7 +1153,7 @@ async function listPublicCampaignsForHunter(body, req) {
       center,
       maxDistanceMeters,
       profile,
-      publicCampaigns: snapshot.docs,
+      publicCampaigns: availableCampaignDocs,
       publicCampaignsById: campaignsById,
       uid,
     });
