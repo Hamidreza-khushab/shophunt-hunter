@@ -18,6 +18,7 @@ import MapView, { Circle, Marker } from "react-native-maps";
 import {
   fetchHunterCampaigns,
   fetchPublicHunterStories,
+  reportHunterInteraction,
 } from "../lib/backend";
 import { colors } from "../theme";
 
@@ -1062,6 +1063,26 @@ export default function HunterHomeScreen({ profile, user, onLogout }) {
     }
   }
 
+  async function handleCampaignMarkerPress(campaign) {
+    const itemId = String(campaign?.recombeeItemId || campaign?.id || "").trim();
+
+    if (!itemId || !user?.getIdToken) {
+      return;
+    }
+
+    try {
+      const idToken = await user.getIdToken();
+      await reportHunterInteraction({
+        eventName: "item_open",
+        idToken,
+        itemId,
+        recommId: campaign?.recommId || undefined,
+      });
+    } catch (error) {
+      console.error("Campaign interaction could not be reported", error);
+    }
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.screen}>
@@ -1110,6 +1131,7 @@ export default function HunterHomeScreen({ profile, user, onLogout }) {
                     coordinate={coordinate}
                     description={getCampaignDescription(campaign)}
                     key={campaign.path || campaign.id}
+                    onPress={() => handleCampaignMarkerPress(campaign)}
                     pinColor={colors.brandPrimary}
                     title={campaign.title || "ShopHunt Kampagne"}
                   />

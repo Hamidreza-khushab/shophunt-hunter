@@ -3,6 +3,7 @@ const admin = require("firebase-admin");
 const { onRequest } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const nodemailer = require("nodemailer");
+const { ApiClient, requests: recombeeRequests } = require("recombee-api-client");
 
 admin.initializeApp();
 
@@ -27,6 +28,13 @@ const DEFAULT_NEARBY_DISTANCE_METERS = 25000;
 const STORY_ADS_SUBCOLLECTION = "storyAds";
 const PUBLIC_STORY_STATUS = "published";
 const MAX_PUBLIC_STORIES = 30;
+const RECOMBEE_NEARBY_SCENARIO = "nearby_hunts";
+const RECOMBEE_ALLOWED_INTERACTIONS = new Set([
+  "hunt_claim_success",
+  "item_dwell",
+  "item_open",
+]);
+const DEFAULT_HUNTER_LANGUAGE = "de";
 
 const disposableEmailDomains = new Set([
   "10minutemail.com",
@@ -38,6 +46,7 @@ const disposableEmailDomains = new Set([
 ]);
 
 let mailTransporter;
+let recombeeClient;
 
 function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
@@ -550,6 +559,37 @@ function publicHunterProfile(profile) {
   };
 }
 
+function normalizePublicInteger(value, fallback = 0) {
+  const parsed = Number.parseInt(String(value ?? fallback), 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function normalizePublicBoolean(value, fallback = false) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (value === null || value === undefined || value === "") {
+    return fallback;
+  }
+
+  if (typeof value === "number") {
+    return value !== 0;
+  }
+
+  const normalized = String(value).trim().toLowerCase();
+
+  if (["1", "true", "yes"].includes(normalized)) {
+    return true;
+  }
+
+  if (["0", "false", "no"].includes(normalized)) {
+    return false;
+  }
+
+  return fallback;
+}
+
 function cleanPublicString(value, maxLength = 240) {
   return String(value || "").trim().slice(0, maxLength);
 }
@@ -567,6 +607,37 @@ function normalizeRadiusMeters(value) {
   }
 
   return Math.min(500, Math.max(10, radius));
+}
+
+function normalizeStringSet(value, maxLength = 80, limit = 20, fallback = []) {
+  const source = Array.isArray(value) ? value : fallback;
+  const seen = new Set();
+  const cleaned = [];
+
+  source.forEach((entry) => {
+    const item = cleanPublicString(entry, maxLength);
+
+    if (!item) {
+      return;
+    }
+
+    const key = item.toLowerCase();
+
+    if (seen.has(key)) {
+      return;
+    }
+
+    seen.add(key);
+    cleaned.push(item);
+  });
+
+  return cleaned.slice(0, limit);
+}
+
+function compactObject(value) {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== undefined)
+  );
 }
 
 function normalizeCampaignPoint(value) {
@@ -618,6 +689,53 @@ function readDateMillis(value) {
 function serializePublicDate(value) {
   const millis = readDateMillis(value);
   return millis === null ? null : new Date(millis).toISOString();
+}
+
+function getOptionalIsoTimestamp(value) {
+  const millis = readDateMillis(value);
+  return millis === null ? undefined : new Date(millis).toISOString();
+}
+
+function getRecombeeConfig() {
+  const databaseId = cleanPublicString(process.env.RECOMBEE_DATABASE_ID, 160);
+  const region = cleanPublicString(process.env.RECOMBEE_REGION || "eu-west", 32);
+  const privateToken = String(process.env.RECOMBEE_PRIVATE_TOKEN || "").trim();
+
+  if (!databaseId || !region || !privateToken) {
+    return null;
+  }
+
+  return {
+    databaseId,
+    privateToken,
+    region,
+  };
+}
+
+function hasRecombeeConfig() {
+  return Boolean(getRecombeeConfig());
+}
+
+function getRecombeeClient() {
+  if (recombeeClient) {
+    return recombeeClient;
+  }
+
+  const config = getRecombeeConfig();
+
+  if (!config) {
+    throw createHttpError(
+      500,
+      "RECOMBEE_CONFIG_MISSING",
+      "Die Recombee-Konfiguration ist unvollständig."
+    );
+  }
+
+  recombeeClient = new ApiClient(config.databaseId, config.privateToken, {
+    region: config.region,
+  });
+
+  return recombeeClient;
 }
 
 function isCampaignCurrentlyAvailable(data) {
@@ -682,6 +800,185 @@ function calculateDistanceMeters(first, second) {
   return Math.round(earthRadiusMeters * c);
 }
 
+function getCampaignItemId(doc) {
+  return cleanPublicString(doc?.id, 160);
+}
+
+function buildCampaignSurfaceTypes(data) {
+  const configured = normalizeStringSet(data?.surfaceTypes, 40, 10);
+
+  if (configured.length) {
+    return configured;
+  }
+
+  return ["map"];
+}
+
+function buildCampaignTags(data) {
+  const rawTags = normalizeStringSet(data?.tags, 60, 20);
+  const category = cleanPublicString(data?.category || data?.type, 80);
+
+  if (!category) {
+    return rawTags;
+  }
+
+  return normalizeStringSet([...rawTags, category], 60, 20);
+}
+
+function buildCampaignItemValues(doc) {
+  const data = doc.data() || {};
+  const huntLocation =
+    data.huntLocation && typeof data.huntLocation === "object"
+      ? data.huntLocation
+      : {};
+  const customer =
+    data.customer && typeof data.customer === "object" ? data.customer : {};
+  const schedule =
+    data.schedule && typeof data.schedule === "object" ? data.schedule : {};
+  const media = data.media && typeof data.media === "object" ? data.media : {};
+  const point = normalizeCampaignPoint(huntLocation.point);
+
+  if (!point) {
+    return null;
+  }
+
+  const category = cleanPublicString(data.category || data.type || "hunt", 80) || "hunt";
+  const available = isCampaignCurrentlyAvailable(data);
+  const rewardScore = normalizePublicNumber(data.rewardScore ?? data.reward ?? 0);
+  const priority = normalizePublicNumber(data.priority ?? 0);
+
+  return compactObject({
+    campaign_id: cleanPublicString(doc.id, 160),
+    store_id: cleanPublicString(data.customerUid || customer.uid, 160),
+    store_name: cleanPublicString(customer.companyName, 240),
+    title: cleanPublicString(data.title, 120) || "ShopHunt Kampagne",
+    category,
+    tags: buildCampaignTags(data),
+    surface_types: buildCampaignSurfaceTypes(data),
+    city:
+      cleanPublicString(huntLocation.city, 120) ||
+      cleanPublicString(data.city, 120) ||
+      cleanPublicString(customer.city, 120),
+    zone_id: cleanPublicString(data.zoneId || huntLocation.zoneId, 160),
+    latitude: point.latitude,
+    longitude: point.longitude,
+    radius_meters: normalizeRadiusMeters(data.radiusMeters),
+    available,
+    start_at: getOptionalIsoTimestamp(
+      schedule.startAt || data.scheduledStartAt || data.publishedAt
+    ),
+    end_at: getOptionalIsoTimestamp(schedule.endAt || data.scheduledEndAt),
+    is_huntable: normalizePublicBoolean(data.isHuntable, available),
+    requires_ar: normalizePublicBoolean(data.requiresAr || data.requiresAR, false),
+    reward_score: rewardScore === null ? 0 : rewardScore,
+    priority: priority === null ? 0 : priority,
+    media_type: cleanPublicString(data.mediaType || media.type || data.type || "map", 40) || "map",
+    image_url:
+      cleanPublicString(
+        data.imageUrl ||
+          data.coverImageUrl ||
+          data.coverImage ||
+          media.previewUrl,
+        1200
+      ) || undefined,
+  });
+}
+
+function buildHunterUserValues(profile) {
+  return compactObject({
+    language:
+      cleanPublicString(profile.language || profile.lang, 16) || DEFAULT_HUNTER_LANGUAGE,
+    home_city: cleanPublicString(profile.homeCity || profile.city, 120),
+    hunter_level: normalizePublicInteger(
+      profile.hunterLevel ?? profile.level ?? 0,
+      0
+    ),
+    preferred_categories: normalizeStringSet(
+      profile.preferredCategories,
+      80,
+      20
+    ),
+    followed_store_ids: normalizeStringSet(
+      profile.followedStoreIds,
+      160,
+      100
+    ),
+    hunt_count: normalizePublicInteger(profile.huntCount ?? 0, 0),
+    last_hunt_at: getOptionalIsoTimestamp(profile.lastHuntAt),
+  });
+}
+
+async function syncCampaignItemsToRecombee(campaignDocs) {
+  const requests = campaignDocs
+    .map((doc) => {
+      const itemId = getCampaignItemId(doc);
+      const values = buildCampaignItemValues(doc);
+
+      if (!itemId || !values) {
+        return null;
+      }
+
+      return new recombeeRequests.SetItemValues(itemId, values, {
+        cascadeCreate: true,
+      });
+    })
+    .filter(Boolean);
+
+  if (!requests.length) {
+    return 0;
+  }
+
+  await getRecombeeClient().send(new recombeeRequests.Batch(requests));
+  return requests.length;
+}
+
+async function syncHunterUserToRecombee(uid, profile) {
+  const userId = cleanPublicString(uid, 160);
+
+  if (!userId) {
+    return;
+  }
+
+  await getRecombeeClient().send(
+    new recombeeRequests.SetUserValues(userId, buildHunterUserValues(profile), {
+      cascadeCreate: true,
+    })
+  );
+}
+
+function buildNearbyRecombeeFilter(center, maxDistanceMeters) {
+  if (!center) {
+    return null;
+  }
+
+  const latitude = Number(center.latitude);
+  const longitude = Number(center.longitude);
+  const radius = normalizePublicInteger(maxDistanceMeters, DEFAULT_NEARBY_DISTANCE_METERS);
+
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude) ||
+    !Number.isFinite(radius) ||
+    radius <= 0
+  ) {
+    return null;
+  }
+
+  return `earth_distance('latitude', 'longitude', ${latitude}, ${longitude}) <= ${radius} + 'radius_meters'`;
+}
+
+function extractRecommendationItemId(recommendation) {
+  if (!recommendation) {
+    return "";
+  }
+
+  if (typeof recommendation === "string") {
+    return cleanPublicString(recommendation, 160);
+  }
+
+  return cleanPublicString(recommendation.id, 160);
+}
+
 function serializePublicCampaign(doc, center) {
   const data = doc.data() || {};
   const huntLocation =
@@ -703,6 +1000,9 @@ function serializePublicCampaign(doc, center) {
   return {
     id: doc.id,
     path: doc.ref.path,
+    recommId: null,
+    recombeeItemId: getCampaignItemId(doc),
+    recommendationSource: "fallback",
     title: cleanPublicString(data.title, 120) || "ShopHunt Kampagne",
     type: cleanPublicString(data.type, 40),
     status: cleanPublicString(data.status, 40),
@@ -750,8 +1050,55 @@ async function assertHunterProfileForRequest(req) {
   };
 }
 
+async function getNearbyCampaignRecommendations({
+  center,
+  maxDistanceMeters,
+  publicCampaigns,
+  publicCampaignsById,
+  uid,
+  profile,
+}) {
+  if (!publicCampaigns.length || !hasRecombeeConfig()) {
+    return null;
+  }
+
+  await Promise.all([
+    syncCampaignItemsToRecombee(publicCampaigns),
+    syncHunterUserToRecombee(uid, profile),
+  ]);
+
+  const recommendationCount = Math.max(
+    1,
+    Math.min(publicCampaignsById.size, MAX_PUBLIC_CAMPAIGNS)
+  );
+
+  const response = await getRecombeeClient().send(
+    new recombeeRequests.RecommendItemsToUser(uid, recommendationCount, {
+      cascadeCreate: true,
+      filter: buildNearbyRecombeeFilter(center, maxDistanceMeters) || undefined,
+      scenario: RECOMBEE_NEARBY_SCENARIO,
+    })
+  );
+
+  const recommId = cleanPublicString(response?.recommId, 240);
+  const campaigns = (Array.isArray(response?.recomms) ? response.recomms : [])
+    .map((recommendation) => extractRecommendationItemId(recommendation))
+    .map((itemId) => publicCampaignsById.get(itemId))
+    .filter(Boolean)
+    .map((campaign) => ({
+      ...campaign,
+      recommId: recommId || campaign.recommId || null,
+      recommendationSource: "recombee",
+    }));
+
+  return {
+    campaigns,
+    recommId: recommId || null,
+  };
+}
+
 async function listPublicCampaignsForHunter(body, req) {
-  await assertHunterProfileForRequest(req);
+  const { uid, profile } = await assertHunterProfileForRequest(req);
 
   const center = normalizeRequestCenter(body.center);
   const requestedMaxDistance = Number.parseInt(
@@ -762,7 +1109,7 @@ async function listPublicCampaignsForHunter(body, req) {
     ? Math.max(1000, Math.min(1000000, requestedMaxDistance))
     : DEFAULT_NEARBY_DISTANCE_METERS;
   const snapshot = await db.collectionGroup("campaigns").get();
-  const campaigns = snapshot.docs
+  const availableCampaigns = snapshot.docs
     .map((doc) => serializePublicCampaign(doc, center))
     .filter(Boolean)
     .filter((campaign) => {
@@ -787,11 +1134,42 @@ async function listPublicCampaignsForHunter(body, req) {
 
       return first.distanceMeters - second.distanceMeters;
     })
-    .slice(0, MAX_PUBLIC_CAMPAIGNS);
+  const campaigns = availableCampaigns.slice(0, MAX_PUBLIC_CAMPAIGNS);
+
+  const campaignsById = new Map(
+    availableCampaigns.map((campaign) => [campaign.recombeeItemId, campaign])
+  );
+
+  try {
+    const recommended = await getNearbyCampaignRecommendations({
+      center,
+      maxDistanceMeters,
+      profile,
+      publicCampaigns: snapshot.docs,
+      publicCampaignsById: campaignsById,
+      uid,
+    });
+
+    if (recommended && recommended.campaigns.length) {
+      return {
+        campaigns: recommended.campaigns,
+        ok: true,
+        recommId: recommended.recommId,
+        source: "recombee",
+      };
+    }
+  } catch (error) {
+    console.error("Recombee nearby recommendation failed", {
+      code: error.code,
+      message: error.message,
+    });
+  }
 
   return {
     ok: true,
     campaigns,
+    recommId: null,
+    source: "fallback",
   };
 }
 
@@ -853,6 +1231,61 @@ async function listPublicStoryAdsForHunter(body, req) {
   return {
     ok: true,
     stories,
+  };
+}
+
+async function sendHunterInteractionToRecombee(body, req) {
+  const { uid, profile } = await assertHunterProfileForRequest(req);
+  const eventName = cleanPublicString(body.eventName, 80);
+  const itemId = cleanPublicString(body.itemId, 160);
+  const recommId = cleanPublicString(body.recommId, 240);
+  const occurredAt = getOptionalIsoTimestamp(body.occurredAt);
+
+  if (!RECOMBEE_ALLOWED_INTERACTIONS.has(eventName)) {
+    throw createHttpError(400, "INTERACTION_NOT_SUPPORTED", "Dieses Ereignis wird noch nicht unterstützt.");
+  }
+
+  if (!itemId) {
+    throw createHttpError(400, "ITEM_ID_REQUIRED", "Die Item-ID fehlt.");
+  }
+
+  if (!hasRecombeeConfig()) {
+    return {
+      ok: true,
+      skipped: true,
+    };
+  }
+
+  await syncHunterUserToRecombee(uid, profile);
+
+  const options = compactObject({
+    cascadeCreate: true,
+    recommId: recommId || undefined,
+    timestamp: occurredAt,
+  });
+
+  if (eventName === "hunt_claim_success") {
+    await getRecombeeClient().send(
+      new recombeeRequests.AddPurchase(uid, itemId, options)
+    );
+  } else {
+    const duration = normalizePublicInteger(body.duration, 0);
+    await getRecombeeClient().send(
+      new recombeeRequests.AddDetailView(
+        uid,
+        itemId,
+        compactObject({
+          ...options,
+          duration: duration > 0 ? duration : undefined,
+        })
+      )
+    );
+  }
+
+  return {
+    eventName,
+    itemId,
+    ok: true,
   };
 }
 
@@ -1007,6 +1440,10 @@ async function routeRequest(req) {
 
   if (path.endsWith("/api/hunter-auth/stories/public")) {
     return listPublicStoryAdsForHunter(body, req);
+  }
+
+  if (path.endsWith("/api/hunter-auth/recombee/interaction")) {
+    return sendHunterInteractionToRecombee(body, req);
   }
 
   throw createHttpError(404, "NOT_FOUND", "Der Endpunkt wurde nicht gefunden.");

@@ -101,6 +101,29 @@ export function fetchPublicHunterStories(idToken) {
   );
 }
 
+export function reportHunterInteraction({
+  duration,
+  eventName,
+  idToken,
+  itemId,
+  occurredAt,
+  recommId,
+}) {
+  return postBackendJson(
+    "/api/hunter-auth/recombee/interaction",
+    {
+      duration,
+      eventName,
+      itemId,
+      occurredAt,
+      recommId,
+    },
+    {
+      idToken,
+    }
+  );
+}
+
 export function upsertHunterProfile({ idToken, displayName, photoURL }) {
   return postBackendJson(
     "/api/hunter-auth/profile/upsert",
